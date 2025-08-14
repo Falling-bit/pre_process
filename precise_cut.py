@@ -13,51 +13,8 @@ def detect_marks(img):
     _, thresh = cv2.threshold(blurred, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     cut_marks = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, np.ones((3, 3)), iterations=2)
 
-    # 第二步：在非切痕区域检测次黑区域（压痕）
-    non_cut = blurred[cut_marks == 0]
-    if len(non_cut) > 0:
-        bg_mean = np.mean(non_cut)
-        # 压痕范围：比背景暗但比切痕浅
-        press_lower = max(0, int(bg_mean * 0.6))  # 比背景暗30%
-        press_upper = max(0, int(bg_mean * 0.8))  # 比背景暗10%
-        press_mask = cv2.inRange(blurred, press_lower, press_upper)
-        press_marks = cv2.bitwise_and(press_mask, cv2.bitwise_not(cut_marks))
-    else:
-        press_marks = np.zeros_like(img)
+    return cut_marks #, press_marks
 
-    return cut_marks, press_marks
-
-'''
-def refine_detection(img, cut_mask):
-    """精细化检测：在非切痕区域区分压痕和背景"""
-    # 提取非切痕区域
-    non_cut_area = img.copy()
-    non_cut_area[cut_mask > 0] = 0  # 将切痕区域置为0
-
-    # 使用自适应阈值处理非切痕区域
-    refine = cv2.adaptiveThreshold(non_cut_area, 255,
-                                    cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
-                                    cv2.THRESH_BINARY_INV, 11, 2)
-
-    # 使用K-means聚类区分压痕和背景
-    non_zero_pixels = img[(refine > 0) & (non_cut_area > 0)]  # 仅在自适应阈值结果中聚类
-    if len(non_zero_pixels) > 2:
-        criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 10, 1.0)
-        _, labels, centers = cv2.kmeans(non_zero_pixels.astype(np.float32),
-                                        2, None, criteria, 10, cv2.KMEANS_RANDOM_CENTERS)
-
-        # 确定哪个簇是压痕（较暗的簇）
-        press_cluster = 0 if centers[0] < centers[1] else 1
-        press_mask = np.zeros_like(img)
-        press_mask[non_cut_area > 0] = (labels == press_cluster).flatten() * 255
-
-        # 后处理
-        press_mask = morphology.remove_small_objects(press_mask.astype(bool),
-                                                     min_size=100).astype(np.uint8) * 255
-        return press_mask
-    else:
-        return np.zeros_like(img)
-'''
 
 
 def refine_detection(img, cut_mask):
@@ -102,11 +59,12 @@ def process_image(img_path):
         return None
 
     # 第一步：粗检测切痕
-    cut, _ = detect_marks(img)
+    cut = detect_marks(img)
     cut = morphology.remove_small_holes(cut.astype(bool), 100).astype(np.uint8) * 255
 
     # 第二步：在非切痕区域精细化检测压痕
     press = refine_detection(img, cut)
+    #_, press = detect_marks(img)
 
     # 打印灰度信息
     print(f"切痕平均灰度: {np.mean(img[cut > 0]):.1f} (应最小)")
@@ -119,7 +77,7 @@ def process_image(img_path):
 
 # 使用示例
 if __name__ == "__main__":
-    result = process_image("./pics/Pic_20250721134051504.bmp")
+    result = process_image("./pics/Pic_20250710140316687.bmp")
     if result:
         cv2.imwrite("cut_result.bmp", result['cut'])
         cv2.imwrite("press_result.bmp", result['press'])
